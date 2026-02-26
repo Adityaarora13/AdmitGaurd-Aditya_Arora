@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   User, 
   GraduationCap, 
@@ -16,7 +16,8 @@ import {
   Calendar,
   Hash,
   Award,
-  Send
+  Send,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -39,6 +40,8 @@ interface FormData {
   offerLetterSent: boolean;
 }
 
+type FormErrors = { [key in keyof FormData]?: string };
+
 const INITIAL_DATA: FormData = {
   fullName: '',
   email: '',
@@ -57,10 +60,84 @@ const INITIAL_DATA: FormData = {
 export default function App() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormData>(INITIAL_DATA);
+  const [validationErrors, setValidationErrors] = useState<FormErrors>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Validation functions
+  const validateField = (field: keyof FormData, value: any): string | undefined => {
+    switch (field) {
+      case 'fullName':
+        if (!value) return 'Full Name cannot be blank.';
+        if (value.length < 2) return 'Full Name must be at least 2 characters.';
+        if (/\d/.test(value)) return 'Full Name cannot contain numbers.';
+        return undefined;
+      case 'email':
+        if (!value) return 'Email cannot be blank.';
+        if (!/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(value)) return 'Invalid email format.';
+        return undefined;
+      case 'phone':
+        if (!value) return 'Phone number cannot be blank.';
+        if (!/^[6-9]\d{9}$/.test(value)) return 'Must be exactly 10 digits and start with 6, 7, 8, or 9.';
+        return undefined;
+      case 'aadhaar':
+        if (!value) return 'Aadhaar Number cannot be blank.';
+        if (!/^\d{12}$/.test(value)) return 'Aadhaar Number must be exactly 12 digits.';
+        return undefined;
+      case 'qualification':
+        if (!value) return 'Highest Qualification must be selected.';
+        return undefined;
+      case 'graduationYear':
+        if (!value) return 'Graduation Year cannot be blank.';
+        const year = parseInt(value);
+        if (isNaN(year) || year < 2015 || year > 2025) return 'Graduation Year must be between 2015 and 2025.';
+        return undefined;
+      case 'score':
+        if (!value) return 'Academic performance score cannot be blank.';
+        const scoreValue = parseFloat(value);
+        if (isNaN(scoreValue) || scoreValue <= 0) return 'Score must be a positive number.';
+        if (formData.scoreMode === 'percentage' && (scoreValue > 100)) return 'Percentage cannot exceed 100.';
+        if (formData.scoreMode === 'cgpa' && (scoreValue > 10)) return 'CGPA cannot exceed 10.';
+        return undefined;
+      case 'screeningScore':
+        if (!value) return 'Screening Test Score cannot be blank.';
+        const screening = parseInt(value);
+        if (isNaN(screening) || screening < 0 || screening > 100) return 'Score must be between 0 and 100.';
+        return undefined;
+      case 'interviewStatus':
+        if (!value) return 'Interview Status must be selected.';
+        return undefined;
+      case 'offerLetterSent':
+        if (value === true && formData.interviewStatus === 'Rejected') {
+          return 'Offer Letter cannot be sent if Interview Status is Rejected.';
+        }
+        return undefined;
+      default:
+        return undefined;
+    }
+  };
+
+  const validateAllFields = (): FormErrors => {
+    const errors: FormErrors = {};
+    (Object.keys(formData) as Array<keyof FormData>).forEach(field => {
+      const error = validateField(field, formData[field]);
+      if (error) errors[field] = error;
+    });
+    return errors;
+  };
 
   const updateField = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Validate immediately after field update
+    setValidationErrors(prev => ({ ...prev, [field]: validateField(field, value) }));
+
+    // Special handling for dependent validations
+    if (field === 'interviewStatus' || field === 'offerLetterSent') {
+      setValidationErrors(prev => ({
+        ...prev,
+        interviewStatus: validateField('interviewStatus', formData.interviewStatus),
+        offerLetterSent: validateField('offerLetterSent', field === 'offerLetterSent' ? value : formData.offerLetterSent),
+      }));
+    }
   };
 
   const steps = [
@@ -69,19 +146,45 @@ export default function App() {
     { id: 3, title: 'Admission Status', icon: ClipboardCheck },
   ];
 
-  // Basic validation for button state (as requested, structure only, no heavy logic yet)
+  const currentStepErrors = useMemo(() => {
+    const errors: FormErrors = {};
+    if (step === 1) {
+      if (validationErrors.fullName) errors.fullName = validationErrors.fullName;
+      if (validationErrors.email) errors.email = validationErrors.email;
+      if (validationErrors.phone) errors.phone = validationErrors.phone;
+      if (validationErrors.aadhaar) errors.aadhaar = validationErrors.aadhaar;
+    } else if (step === 2) {
+      if (validationErrors.qualification) errors.qualification = validationErrors.qualification;
+      if (validationErrors.graduationYear) errors.graduationYear = validationErrors.graduationYear;
+      if (validationErrors.score) errors.score = validationErrors.score;
+    } else if (step === 3) {
+      if (validationErrors.screeningScore) errors.screeningScore = validationErrors.screeningScore;
+      if (validationErrors.interviewStatus) errors.interviewStatus = validationErrors.interviewStatus;
+      if (validationErrors.offerLetterSent) errors.offerLetterSent = validationErrors.offerLetterSent;
+    }
+    return errors;
+  }, [step, validationErrors]);
+
+  const isFormValid = useMemo(() => {
+    const errors = validateAllFields();
+    return Object.keys(errors).length === 0;
+  }, [formData]); // Re-evaluate when formData changes
+
   const isStepValid = useMemo(() => {
     if (step === 1) {
-      return formData.fullName && formData.email && formData.phone.length === 10 && formData.aadhaar.length === 12;
+      return !validationErrors.fullName && !validationErrors.email && !validationErrors.phone && !validationErrors.aadhaar &&
+             formData.fullName && formData.email && formData.phone.length === 10 && formData.aadhaar.length === 12;
     }
     if (step === 2) {
-      return formData.qualification && formData.graduationYear && formData.score;
+      return !validationErrors.qualification && !validationErrors.graduationYear && !validationErrors.score &&
+             formData.qualification && formData.graduationYear && formData.score;
     }
     if (step === 3) {
-      return formData.screeningScore && formData.interviewStatus;
+      return !validationErrors.screeningScore && !validationErrors.interviewStatus && !validationErrors.offerLetterSent &&
+             formData.screeningScore && formData.interviewStatus;
     }
     return false;
-  }, [step, formData]);
+  }, [step, formData, validationErrors]);
 
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
@@ -93,10 +196,15 @@ export default function App() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isStepValid && step === 3) {
+    const errors = validateAllFields();
+    setValidationErrors(errors);
+    if (Object.keys(errors).length === 0 && step === 3) {
       setIsSubmitted(true);
     }
   };
+
+  const isRejected = formData.interviewStatus === 'Rejected';
+  const canSubmit = isFormValid && !isRejected;
 
   if (isSubmitted) {
     return (
@@ -112,7 +220,7 @@ export default function App() {
           <h2 className="text-2xl font-semibold text-zinc-900 mb-2">Admission Submitted</h2>
           <p className="text-zinc-500 mb-8">The candidate profile for <span className="font-medium text-zinc-900">{formData.fullName}</span> has been successfully recorded.</p>
           <button 
-            onClick={() => { setIsSubmitted(false); setStep(1); setFormData(INITIAL_DATA); }}
+            onClick={() => { setIsSubmitted(false); setStep(1); setFormData(INITIAL_DATA); setValidationErrors({}); }}
             className="w-full py-3 bg-zinc-900 text-white rounded-xl font-medium hover:bg-zinc-800 transition-colors"
           >
             Register Another Candidate
@@ -130,6 +238,21 @@ export default function App() {
           <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 mb-2">Candidate Admission</h1>
           <p className="text-zinc-500">Complete the enrollment process for new applicants</p>
         </div>
+
+        {/* Rejected Banner */}
+        <AnimatePresence>
+          {isRejected && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-red-500 text-white p-4 rounded-xl mb-8 flex items-center gap-3 shadow-md"
+            >
+              <AlertCircle className="w-5 h-5" />
+              <p className="font-medium">Rejected candidates cannot be enrolled.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Progress Tracker */}
         <div className="mb-10 flex justify-between relative px-4">
@@ -168,7 +291,7 @@ export default function App() {
                   className="space-y-6"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField label="Full Name" icon={User}>
+                    <FormField label="Full Name" icon={User} error={validationErrors.fullName}>
                       <input 
                         type="text" 
                         placeholder="John Doe"
@@ -177,7 +300,7 @@ export default function App() {
                         className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
                     </FormField>
-                    <FormField label="Email Address" icon={Mail}>
+                    <FormField label="Email Address" icon={Mail} error={validationErrors.email}>
                       <input 
                         type="email" 
                         placeholder="john@example.com"
@@ -186,7 +309,7 @@ export default function App() {
                         className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
                     </FormField>
-                    <FormField label="Phone Number" icon={Phone}>
+                    <FormField label="Phone Number" icon={Phone} error={validationErrors.phone}>
                       <input 
                         type="tel" 
                         placeholder="10-digit number"
@@ -196,7 +319,7 @@ export default function App() {
                         className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
                     </FormField>
-                    <FormField label="Date of Birth" icon={Calendar}>
+                    <FormField label="Date of Birth" icon={Calendar} error={validationErrors.dob}>
                       <input 
                         type="date" 
                         value={formData.dob}
@@ -205,7 +328,7 @@ export default function App() {
                       />
                     </FormField>
                     <div className="md:col-span-2">
-                      <FormField label="Aadhaar Number" icon={Hash}>
+                      <FormField label="Aadhaar Number" icon={Hash} error={validationErrors.aadhaar}>
                         <input 
                           type="text" 
                           placeholder="12-digit Aadhaar"
@@ -229,7 +352,7 @@ export default function App() {
                   className="space-y-6"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField label="Highest Qualification" icon={GraduationCap}>
+                    <FormField label="Highest Qualification" icon={GraduationCap} error={validationErrors.qualification}>
                       <select 
                         value={formData.qualification}
                         onChange={(e) => updateField('qualification', e.target.value)}
@@ -241,7 +364,7 @@ export default function App() {
                         ))}
                       </select>
                     </FormField>
-                    <FormField label="Graduation Year" icon={Calendar}>
+                    <FormField label="Graduation Year" icon={Calendar} error={validationErrors.graduationYear}>
                       <input 
                         type="number" 
                         min="2015" 
@@ -281,10 +404,10 @@ export default function App() {
                         placeholder={formData.scoreMode === 'percentage' ? 'e.g. 85.5' : 'e.g. 8.5'}
                         value={formData.score}
                         onChange={(e) => updateField('score', e.target.value)}
-                        className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
+                        className="w-full px-4 py-3 bg-zinc-500 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
-                      <div className="mt-1 h-5 text-[10px] text-zinc-400 uppercase tracking-widest">
-                        Validation message area
+                      <div className="mt-1 h-5 text-[10px] text-red-500 uppercase tracking-widest">
+                        {validationErrors.score}
                       </div>
                     </div>
                   </div>
@@ -300,7 +423,7 @@ export default function App() {
                   className="space-y-6"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField label="Screening Test Score" icon={ClipboardCheck}>
+                    <FormField label="Screening Test Score" icon={ClipboardCheck} error={validationErrors.screeningScore}>
                       <input 
                         type="number" 
                         min="0" 
@@ -311,7 +434,7 @@ export default function App() {
                         className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
                     </FormField>
-                    <FormField label="Interview Status" icon={Award}>
+                    <FormField label="Interview Status" icon={Award} error={validationErrors.interviewStatus}>
                       <select 
                         value={formData.interviewStatus}
                         onChange={(e) => updateField('interviewStatus', e.target.value)}
@@ -350,6 +473,9 @@ export default function App() {
                           />
                         </button>
                       </div>
+                      <div className="mt-1 h-5 text-[10px] text-red-500 uppercase tracking-widest">
+                        {validationErrors.offerLetterSent}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -387,10 +513,10 @@ export default function App() {
               ) : (
                 <button
                   type="submit"
-                  disabled={!isStepValid}
+                  disabled={!canSubmit}
                   className={`
                     flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-medium transition-all
-                    ${!isStepValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-700 shadow-lg shadow-emerald-600/10'}
+                    ${!canSubmit ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-700 shadow-lg shadow-emerald-600/10'}
                   `}
                 >
                   Complete Enrollment
@@ -409,7 +535,7 @@ export default function App() {
   );
 }
 
-function FormField({ label, icon: Icon, children }: { label: string, icon: any, children: React.ReactNode }) {
+function FormField({ label, icon: Icon, children, error }: { label: string, icon: any, children: React.ReactNode, error?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
@@ -417,8 +543,8 @@ function FormField({ label, icon: Icon, children }: { label: string, icon: any, 
         {label}
       </label>
       {children}
-      <div className="h-5 text-[10px] text-zinc-400 uppercase tracking-widest">
-        {/* Placeholder for validation messages */}
+      <div className="h-5 text-[10px] text-red-500 uppercase tracking-widest">
+        {error}
       </div>
     </div>
   );
