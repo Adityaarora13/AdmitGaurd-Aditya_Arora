@@ -1,0 +1,5 @@
+{
+  "name": "EduEnroll - Candidate Admission System",
+  "description": "A professional internal tool for managing candidate admissions, featuring a multi-step enrollment form with real-time validation and status tracking.",
+  "requestFramePermissions": []
+}
