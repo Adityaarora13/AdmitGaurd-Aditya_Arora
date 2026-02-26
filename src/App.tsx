@@ -17,7 +17,8 @@ import {
   Hash,
   Award,
   Send,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle // Added for soft warnings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -30,85 +31,147 @@ interface FormData {
   email: string;
   phone: string;
   dob: string;
+  dobException: boolean;
+  dobRationale: string;
   aadhaar: string;
   qualification: Qualification | '';
   graduationYear: string;
+  graduationYearException: boolean;
+  graduationYearRationale: string;
   scoreMode: ScoreMode;
   score: string;
+  scoreException: boolean;
+  scoreRationale: string;
   screeningScore: string;
+  screeningScoreException: boolean;
+  screeningScoreRationale: string;
   interviewStatus: InterviewStatus | '';
   offerLetterSent: boolean;
 }
 
-type FormErrors = { [key in keyof FormData]?: string };
+type ValidationResult = { type: 'strict' | 'soft', message: string } | undefined;
+
+interface SoftRuleState {
+  isExcepted: boolean;
+  rationale: string;
+  rationaleError?: string;
+}
+
+type SoftRuleStates = { [field: string]: SoftRuleState };
 
 const INITIAL_DATA: FormData = {
   fullName: '',
   email: '',
   phone: '',
   dob: '',
+  dobException: false,
+  dobRationale: '',
   aadhaar: '',
   qualification: '',
   graduationYear: '',
+  graduationYearException: false,
+  graduationYearRationale: '',
   scoreMode: 'percentage',
   score: '',
+  scoreException: false,
+  scoreRationale: '',
   screeningScore: '',
+  screeningScoreException: false,
+  screeningScoreRationale: '',
   interviewStatus: '',
   offerLetterSent: false,
 };
+
+const RATIONALE_PHRASES = ["approved by", "special case", "documentation pending", "waiver granted"];
+
+
+
+
+
+type FormErrors = { [key in keyof FormData]?: string };
+
+
 
 export default function App() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormData>(INITIAL_DATA);
   const [validationErrors, setValidationErrors] = useState<FormErrors>({});
+  const [softRuleStates, setSoftRuleStates] = useState<SoftRuleStates>({
+    dob: { isExcepted: INITIAL_DATA.dobException, rationale: INITIAL_DATA.dobRationale },
+    graduationYear: { isExcepted: INITIAL_DATA.graduationYearException, rationale: INITIAL_DATA.graduationYearRationale },
+    score: { isExcepted: INITIAL_DATA.scoreException, rationale: INITIAL_DATA.scoreRationale },
+    screeningScore: { isExcepted: INITIAL_DATA.screeningScoreException, rationale: INITIAL_DATA.screeningScoreRationale },
+  });
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  useEffect(() => {
+    const { strictErrors, softErrors } = validateAllFields();
+    setValidationErrors({ ...strictErrors, ...softErrors });
+  }, [formData, softRuleStates]);
+
   // Validation functions
-  const validateField = (field: keyof FormData, value: any): string | undefined => {
+  const validateField = (field: keyof FormData, value: any): ValidationResult => {
     switch (field) {
       case 'fullName':
-        if (!value) return 'Full Name cannot be blank.';
-        if (value.length < 2) return 'Full Name must be at least 2 characters.';
-        if (/\d/.test(value)) return 'Full Name cannot contain numbers.';
+        if (!value) return { type: 'strict', message: 'Full Name cannot be blank.' };
+        if (value.length < 2) return { type: 'strict', message: 'Full Name must be at least 2 characters.' };
+        if (/\d/.test(value)) return { type: 'strict', message: 'Full Name cannot contain numbers.' };
         return undefined;
       case 'email':
-        if (!value) return 'Email cannot be blank.';
-        if (!/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(value)) return 'Invalid email format.';
+        if (!value) return { type: 'strict', message: 'Email cannot be blank.' };
+        if (!/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(value)) return { type: 'strict', message: 'Invalid email format.' };
         return undefined;
       case 'phone':
-        if (!value) return 'Phone number cannot be blank.';
-        if (!/^[6-9]\d{9}$/.test(value)) return 'Must be exactly 10 digits and start with 6, 7, 8, or 9.';
+        if (!value) return { type: 'strict', message: 'Phone number cannot be blank.' };
+        if (!/^[6-9]\d{9}$/.test(value)) return { type: 'strict', message: 'Must be exactly 10 digits and start with 6, 7, 8, or 9.' };
+        return undefined;
+      case 'dob':
+        if (!value) return { type: 'strict', message: 'Date of Birth cannot be blank.' };
+        const dobDate = new Date(value);
+        const today = new Date();
+        let age = today.getFullYear() - dobDate.getFullYear();
+        const m = today.getMonth() - dobDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+          age--;
+        }
+        if (age < 18 || age > 35) return { type: 'soft', message: 'Candidate must be between 18 and 35 years old.' };
         return undefined;
       case 'aadhaar':
-        if (!value) return 'Aadhaar Number cannot be blank.';
-        if (!/^\d{12}$/.test(value)) return 'Aadhaar Number must be exactly 12 digits.';
+        if (!value) return { type: 'strict', message: 'Aadhaar Number cannot be blank.' };
+        if (!/^\d{12}$/.test(value)) return { type: 'strict', message: 'Aadhaar Number must be exactly 12 digits.' };
         return undefined;
       case 'qualification':
-        if (!value) return 'Highest Qualification must be selected.';
+        if (!value) return { type: 'strict', message: 'Highest Qualification must be selected.' };
         return undefined;
       case 'graduationYear':
-        if (!value) return 'Graduation Year cannot be blank.';
+        if (!value) return { type: 'strict', message: 'Graduation Year cannot be blank.' };
         const year = parseInt(value);
-        if (isNaN(year) || year < 2015 || year > 2025) return 'Graduation Year must be between 2015 and 2025.';
+        if (isNaN(year) || year < 2015 || year > 2025) return { type: 'soft', message: 'Graduation Year must be between 2015 and 2025.' };
         return undefined;
       case 'score':
-        if (!value) return 'Academic performance score cannot be blank.';
+        if (!value) return { type: 'strict', message: 'Academic performance score cannot be blank.' };
         const scoreValue = parseFloat(value);
-        if (isNaN(scoreValue) || scoreValue <= 0) return 'Score must be a positive number.';
-        if (formData.scoreMode === 'percentage' && (scoreValue > 100)) return 'Percentage cannot exceed 100.';
-        if (formData.scoreMode === 'cgpa' && (scoreValue > 10)) return 'CGPA cannot exceed 10.';
+        if (isNaN(scoreValue) || scoreValue <= 0) return { type: 'strict', message: 'Score must be a positive number.' };
+        if (formData.scoreMode === 'percentage') {
+          if (scoreValue > 100) return { type: 'strict', message: 'Percentage cannot exceed 100.' };
+          if (scoreValue < 60) return { type: 'soft', message: 'Percentage must be at least 60%.' };
+        } else if (formData.scoreMode === 'cgpa') {
+          if (scoreValue > 10) return { type: 'strict', message: 'CGPA cannot exceed 10.' };
+          if (scoreValue < 6.0) return { type: 'soft', message: 'CGPA must be at least 6.0.' };
+        }
         return undefined;
       case 'screeningScore':
-        if (!value) return 'Screening Test Score cannot be blank.';
+        if (!value) return { type: 'strict', message: 'Screening Test Score cannot be blank.' };
         const screening = parseInt(value);
-        if (isNaN(screening) || screening < 0 || screening > 100) return 'Score must be between 0 and 100.';
+        if (isNaN(screening) || screening < 0 || screening > 100) return { type: 'strict', message: 'Score must be between 0 and 100.' };
+        if (screening < 40) return { type: 'soft', message: 'Screening Test Score must be at least 40.' };
         return undefined;
       case 'interviewStatus':
-        if (!value) return 'Interview Status must be selected.';
+        if (!value) return { type: 'strict', message: 'Interview Status must be selected.' };
         return undefined;
       case 'offerLetterSent':
         if (value === true && formData.interviewStatus === 'Rejected') {
-          return 'Offer Letter cannot be sent if Interview Status is Rejected.';
+          return { type: 'strict', message: 'Offer Letter cannot be sent if Interview Status is Rejected.' };
         }
         return undefined;
       default:
@@ -116,28 +179,96 @@ export default function App() {
     }
   };
 
-  const validateAllFields = (): FormErrors => {
-    const errors: FormErrors = {};
+  const validateRationale = (rationale: string): string | undefined => {
+    if (rationale.length < 30) return 'Rationale must be at least 30 characters long.';
+    if (!RATIONALE_PHRASES.some(phrase => rationale.toLowerCase().includes(phrase))) {
+      return `Rationale must contain one of: ${RATIONALE_PHRASES.join(', ')}.`;
+    }
+    return undefined;
+  };
+
+  const validateAllFields = (): { strictErrors: FormErrors, softErrors: FormErrors } => {
+    const strictErrors: FormErrors = {};
+    const softErrors: FormErrors = {};
+
     (Object.keys(formData) as Array<keyof FormData>).forEach(field => {
-      const error = validateField(field, formData[field]);
-      if (error) errors[field] = error;
+      const result = validateField(field, formData[field]);
+      if (result) {
+        if (result.type === 'strict') {
+          strictErrors[field] = result.message;
+        } else {
+          const softState = softRuleStates[field];
+          if (!softState?.isExcepted || validateRationale(softState.rationale)) {
+            softErrors[field] = result.message;
+          }
+        }
+      }
     });
-    return errors;
+    return { strictErrors, softErrors };
   };
 
   const updateField = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Validate immediately after field update
-    setValidationErrors(prev => ({ ...prev, [field]: validateField(field, value) }));
+
+    const result = validateField(field, value);
+    if (result) {
+      if (result.type === 'strict') {
+        setValidationErrors(prev => ({ ...prev, [field]: result.message }));
+        setSoftRuleStates(prev => ({ ...prev, [field]: { ...prev[field], rationaleError: undefined } }));
+      } else { // Soft validation
+        setValidationErrors(prev => ({ ...prev, [field]: undefined })); // Clear strict error if it was there
+        setSoftRuleStates(prev => {
+          const newSoftState = { ...prev[field], rationaleError: undefined };
+          // If soft rule is violated and not excepted, set the soft error
+          if (!newSoftState.isExcepted) {
+            setValidationErrors(currentErrors => ({ ...currentErrors, [field]: result.message }));
+          } else {
+            // If excepted, validate rationale
+            const rationaleError = validateRationale(newSoftState.rationale);
+            newSoftState.rationaleError = rationaleError;
+            if (rationaleError) {
+              setValidationErrors(currentErrors => ({ ...currentErrors, [field]: rationaleError }));
+            } else {
+              setValidationErrors(currentErrors => ({ ...currentErrors, [field]: undefined }));
+            }
+          }
+          return { ...prev, [field]: newSoftState };
+        });
+      }
+    } else {
+      setValidationErrors(prev => ({ ...prev, [field]: undefined }));
+      setSoftRuleStates(prev => ({ ...prev, [field]: { ...prev[field], rationaleError: undefined } }));
+    }
 
     // Special handling for dependent validations
     if (field === 'interviewStatus' || field === 'offerLetterSent') {
+      const interviewStatusResult = validateField('interviewStatus', field === 'interviewStatus' ? value : formData.interviewStatus);
+      const offerLetterSentResult = validateField('offerLetterSent', field === 'offerLetterSent' ? value : formData.offerLetterSent);
+
       setValidationErrors(prev => ({
         ...prev,
-        interviewStatus: validateField('interviewStatus', formData.interviewStatus),
-        offerLetterSent: validateField('offerLetterSent', field === 'offerLetterSent' ? value : formData.offerLetterSent),
+        interviewStatus: interviewStatusResult?.type === 'strict' ? interviewStatusResult.message : undefined,
+        offerLetterSent: offerLetterSentResult?.type === 'strict' ? offerLetterSentResult.message : undefined,
       }));
     }
+  };
+
+  const handleSoftRuleToggle = (field: keyof FormData, isExcepted: boolean) => {
+    setSoftRuleStates(prev => ({
+      ...prev,
+      [field]: { ...prev[field], isExcepted, rationale: isExcepted ? prev[field].rationale : '' },
+    }));
+    // Re-validate field to update error display based on new exception status
+    updateField(field, formData[field]);
+  };
+
+  const handleRationaleChange = (field: keyof FormData, rationale: string) => {
+    setSoftRuleStates(prev => ({
+      ...prev,
+      [field]: { ...prev[field], rationale },
+    }));
+    // Re-validate field to update error display based on new rationale
+    updateField(field, formData[field]);
   };
 
   const steps = [
@@ -147,44 +278,54 @@ export default function App() {
   ];
 
   const currentStepErrors = useMemo(() => {
+    const { strictErrors, softErrors } = validateAllFields();
+    const allErrors = { ...strictErrors, ...softErrors };
     const errors: FormErrors = {};
+    const currentStepFields: (keyof FormData)[] = [];
     if (step === 1) {
-      if (validationErrors.fullName) errors.fullName = validationErrors.fullName;
-      if (validationErrors.email) errors.email = validationErrors.email;
-      if (validationErrors.phone) errors.phone = validationErrors.phone;
-      if (validationErrors.aadhaar) errors.aadhaar = validationErrors.aadhaar;
+      currentStepFields.push('fullName', 'email', 'phone', 'dob', 'aadhaar');
     } else if (step === 2) {
-      if (validationErrors.qualification) errors.qualification = validationErrors.qualification;
-      if (validationErrors.graduationYear) errors.graduationYear = validationErrors.graduationYear;
-      if (validationErrors.score) errors.score = validationErrors.score;
+      currentStepFields.push('qualification', 'graduationYear', 'score');
     } else if (step === 3) {
-      if (validationErrors.screeningScore) errors.screeningScore = validationErrors.screeningScore;
-      if (validationErrors.interviewStatus) errors.interviewStatus = validationErrors.interviewStatus;
-      if (validationErrors.offerLetterSent) errors.offerLetterSent = validationErrors.offerLetterSent;
+      currentStepFields.push('screeningScore', 'interviewStatus', 'offerLetterSent');
     }
+    currentStepFields.forEach(field => {
+      if (allErrors[field]) {
+        errors[field] = allErrors[field];
+      }
+    });
     return errors;
-  }, [step, validationErrors]);
+  }, [step, formData, softRuleStates]);
 
   const isFormValid = useMemo(() => {
-    const errors = validateAllFields();
-    return Object.keys(errors).length === 0;
-  }, [formData]); // Re-evaluate when formData changes
+    const { strictErrors, softErrors } = validateAllFields();
+    return Object.keys(strictErrors).length === 0 && Object.keys(softErrors).length === 0;
+  }, [formData, softRuleStates]); // Re-evaluate when formData or softRuleStates changes
 
   const isStepValid = useMemo(() => {
+    const { strictErrors, softErrors } = validateAllFields();
+    const currentStepFields: (keyof FormData)[] = [];
     if (step === 1) {
-      return !validationErrors.fullName && !validationErrors.email && !validationErrors.phone && !validationErrors.aadhaar &&
-             formData.fullName && formData.email && formData.phone.length === 10 && formData.aadhaar.length === 12;
+      currentStepFields.push('fullName', 'email', 'phone', 'dob', 'aadhaar');
+    } else if (step === 2) {
+      currentStepFields.push('qualification', 'graduationYear', 'score');
+    } else if (step === 3) {
+      currentStepFields.push('screeningScore', 'interviewStatus', 'offerLetterSent');
     }
-    if (step === 2) {
-      return !validationErrors.qualification && !validationErrors.graduationYear && !validationErrors.score &&
-             formData.qualification && formData.graduationYear && formData.score;
-    }
-    if (step === 3) {
-      return !validationErrors.screeningScore && !validationErrors.interviewStatus && !validationErrors.offerLetterSent &&
-             formData.screeningScore && formData.interviewStatus;
-    }
-    return false;
-  }, [step, formData, validationErrors]);
+
+    const hasStrictErrors = currentStepFields.some(field => strictErrors[field]);
+    const hasSoftErrors = currentStepFields.some(field => softErrors[field]);
+
+    // Additionally check if all required fields for the step have values
+    const allFieldsFilled = currentStepFields.every(field => {
+      const value = formData[field];
+      if (typeof value === 'string') return value.trim() !== '';
+      if (typeof value === 'boolean') return true; // Toggles are always "filled"
+      return value !== null && value !== undefined;
+    });
+
+    return !hasStrictErrors && !hasSoftErrors && allFieldsFilled;
+  }, [step, formData, softRuleStates]);
 
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
@@ -196,9 +337,9 @@ export default function App() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errors = validateAllFields();
-    setValidationErrors(errors);
-    if (Object.keys(errors).length === 0 && step === 3) {
+    const { strictErrors, softErrors } = validateAllFields();
+    setValidationErrors({ ...strictErrors, ...softErrors });
+    if (Object.keys(strictErrors).length === 0 && Object.keys(softErrors).length === 0 && step === 3) {
       setIsSubmitted(true);
     }
   };
@@ -319,7 +460,16 @@ export default function App() {
                         className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
                     </FormField>
-                    <FormField label="Date of Birth" icon={Calendar} error={validationErrors.dob}>
+                    <FormField
+                      label="Date of Birth"
+                      icon={Calendar}
+                      error={validationErrors.dob}
+                      isSoftRule
+                      fieldKey="dob"
+                      softRuleState={softRuleStates.dob}
+                      onSoftRuleToggle={handleSoftRuleToggle}
+                      onRationaleChange={handleRationaleChange}
+                    >
                       <input 
                         type="date" 
                         value={formData.dob}
@@ -364,7 +514,16 @@ export default function App() {
                         ))}
                       </select>
                     </FormField>
-                    <FormField label="Graduation Year" icon={Calendar} error={validationErrors.graduationYear}>
+                    <FormField
+                      label="Graduation Year"
+                      icon={Calendar}
+                      error={validationErrors.graduationYear}
+                      isSoftRule
+                      fieldKey="graduationYear"
+                      softRuleState={softRuleStates.graduationYear}
+                      onSoftRuleToggle={handleSoftRuleToggle}
+                      onRationaleChange={handleRationaleChange}
+                    >
                       <input 
                         type="number" 
                         min="2015" 
@@ -404,11 +563,49 @@ export default function App() {
                         placeholder={formData.scoreMode === 'percentage' ? 'e.g. 85.5' : 'e.g. 8.5'}
                         value={formData.score}
                         onChange={(e) => updateField('score', e.target.value)}
-                        className="w-full px-4 py-3 bg-zinc-500 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
+                        className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
                       />
-                      <div className="mt-1 h-5 text-[10px] text-red-500 uppercase tracking-widest">
-                        {validationErrors.score}
-                      </div>
+                      {(validationErrors.score || softRuleStates.score.rationaleError) && (
+                        <div className={`mt-1 h-5 text-[10px] uppercase tracking-widest flex items-center gap-1 ${softRuleStates.score.rationaleError ? 'text-red-500' : 'text-amber-600'}`}>
+                          {(softRuleStates.score.rationaleError || (validationErrors.score && validateField('score', formData.score)?.type === 'soft' && !softRuleStates.score.isExcepted)) && <AlertTriangle className="w-3 h-3" />}
+                          {validationErrors.score || softRuleStates.score.rationaleError}
+                        </div>
+                      )}
+                      {validateField('score', formData.score)?.type === 'soft' && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="score-exception" className="text-xs font-medium text-amber-800 flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="score-exception"
+                                checked={softRuleStates.score.isExcepted}
+                                onChange={(e) => handleSoftRuleToggle('score', e.target.checked)}
+                                className="form-checkbox h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
+                              />
+                              Request Exception
+                            </label>
+                          </div>
+                          {softRuleStates.score.isExcepted && (
+                            <div className="flex flex-col gap-2">
+                              <label htmlFor="score-rationale" className="text-xs font-medium text-amber-800">Exception Rationale</label>
+                              <textarea
+                                id="score-rationale"
+                                rows={3}
+                                value={softRuleStates.score.rationale}
+                                onChange={(e) => handleRationaleChange('score', e.target.value)}
+                                className={`w-full px-3 py-2 text-sm bg-amber-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${softRuleStates.score.rationaleError ? 'border-red-400' : 'border-amber-200'}`}
+                                placeholder="e.g., Waiver granted by Dean, documentation pending..."
+                              />
+                              {softRuleStates.score.rationaleError && (
+                                <div className="text-[10px] text-red-500 uppercase tracking-widest flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3" />
+                                  {softRuleStates.score.rationaleError}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -423,7 +620,16 @@ export default function App() {
                   className="space-y-6"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField label="Screening Test Score" icon={ClipboardCheck} error={validationErrors.screeningScore}>
+                    <FormField
+                      label="Screening Test Score"
+                      icon={ClipboardCheck}
+                      error={validationErrors.screeningScore}
+                      isSoftRule
+                      fieldKey="screeningScore"
+                      softRuleState={softRuleStates.screeningScore}
+                      onSoftRuleToggle={handleSoftRuleToggle}
+                      onRationaleChange={handleRationaleChange}
+                    >
                       <input 
                         type="number" 
                         min="0" 
@@ -535,17 +741,88 @@ export default function App() {
   );
 }
 
-function FormField({ label, icon: Icon, children, error }: { label: string, icon: any, children: React.ReactNode, error?: string }) {
+function FormField({
+  label,
+  icon: Icon,
+  children,
+  error,
+  isSoftRule = false,
+  fieldKey,
+  softRuleState,
+  onSoftRuleToggle,
+  onRationaleChange,
+}: {
+  label: string;
+  icon: any;
+  children: React.ReactNode;
+  error?: string;
+  isSoftRule?: boolean;
+  fieldKey?: keyof FormData;
+  softRuleState?: SoftRuleState;
+  onSoftRuleToggle?: (field: keyof FormData, isExcepted: boolean) => void;
+  onRationaleChange?: (field: keyof FormData, rationale: string) => void;
+}) {
+  const isError = !!error;
+  const isSoftError = isError && isSoftRule && softRuleState && !softRuleState.isExcepted;
+  const isRationaleError = isError && isSoftRule && softRuleState?.isExcepted && softRuleState.rationaleError;
+  const isValid = !isError && children && (children as React.ReactElement).props.value !== '';
+
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-sm font-medium text-zinc-700 flex items-center gap-2">
         <Icon className="w-4 h-4 text-zinc-400" />
         {label}
       </label>
-      {children}
-      <div className="h-5 text-[10px] text-red-500 uppercase tracking-widest">
-        {error}
-      </div>
+      {React.Children.map(children, child => {
+        if (React.isValidElement(child)) {
+          return React.cloneElement(child, {
+            className: `${child.props.className || ''} ${isError ? 'border-red-300 focus:ring-red-200/50' : isValid ? 'border-emerald-300 focus:ring-emerald-200/50' : ''}`
+          });
+        }
+        return child;
+      })}
+      {(isError || isSoftError || isRationaleError) && (
+        <div className={`mt-1 h-5 text-[10px] uppercase tracking-widest flex items-center gap-1 ${isSoftError || isRationaleError ? 'text-amber-600' : 'text-red-500'}`}>
+          {(isSoftError || isRationaleError) && <AlertTriangle className="w-3 h-3" />}
+          {error}
+        </div>
+      )}
+
+      {isSoftRule && isError && fieldKey && onSoftRuleToggle && onRationaleChange && (
+        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <label htmlFor={`${fieldKey}-exception`} className="text-xs font-medium text-amber-800 flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={`${fieldKey}-exception`}
+                checked={softRuleState?.isExcepted || false}
+                onChange={(e) => onSoftRuleToggle(fieldKey, e.target.checked)}
+                className="form-checkbox h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
+              />
+              Request Exception
+            </label>
+          </div>
+          {softRuleState?.isExcepted && (
+            <div className="flex flex-col gap-2">
+              <label htmlFor={`${fieldKey}-rationale`} className="text-xs font-medium text-amber-800">Exception Rationale</label>
+              <textarea
+                id={`${fieldKey}-rationale`}
+                rows={3}
+                value={softRuleState.rationale}
+                onChange={(e) => onRationaleChange(fieldKey, e.target.value)}
+                className={`w-full px-3 py-2 text-sm bg-amber-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${softRuleState.rationaleError ? 'border-red-400' : 'border-amber-200'}`}
+                placeholder="e.g., Waiver granted by Dean, documentation pending..."
+              />
+              {softRuleState.rationaleError && (
+                <div className="text-[10px] text-red-500 uppercase tracking-widest flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {softRuleState.rationaleError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
