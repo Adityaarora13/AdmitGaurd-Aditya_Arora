@@ -1,0 +1,75 @@
+{
+  "rules": [
+    {
+      "field": "fullName",
+      "type": "strict",
+      "validation": "required, minLength:2, noNumbers",
+      "errorMessage": "Full Name cannot be blank, must be at least 2 characters, and cannot contain numbers."
+    },
+    {
+      "field": "email",
+      "type": "strict",
+      "validation": "required, emailFormat",
+      "errorMessage": "Email cannot be blank and must be a valid email format."
+    },
+    {
+      "field": "phone",
+      "type": "strict",
+      "validation": "required, phoneFormat",
+      "errorMessage": "Phone number must be exactly 10 digits and start with 6, 7, 8, or 9."
+    },
+    {
+      "field": "dob",
+      "type": "soft",
+      "validation": "required, ageRange:18-35",
+      "errorMessage": "Date of Birth cannot be blank. Candidate must be between 18 and 35 years old.",
+      "exceptionAllowed": true
+    },
+    {
+      "field": "aadhaar",
+      "type": "strict",
+      "validation": "required, aadhaarFormat",
+      "errorMessage": "Aadhaar Number cannot be blank and must be exactly 12 digits."
+    },
+    {
+      "field": "qualification",
+      "type": "strict",
+      "validation": "required",
+      "errorMessage": "Highest Qualification must be selected."
+    },
+    {
+      "field": "graduationYear",
+      "type": "soft",
+      "validation": "required, yearRange:2015-2025",
+      "errorMessage": "Graduation Year cannot be blank and must be between 2015 and 2025.",
+      "exceptionAllowed": true
+    },
+    {
+      "field": "score",
+      "type": "soft",
+      "validation": "required, positiveNumber, scoreRange",
+      "errorMessage": "Academic performance score cannot be blank, must be a positive number. Percentage must be at least 60% or CGPA at least 6.0.",
+      "exceptionAllowed": true
+    },
+    {
+      "field": "screeningScore",
+      "type": "soft",
+      "validation": "required, scoreRange:0-100, minScore:40",
+      "errorMessage": "Screening Test Score cannot be blank, must be between 0 and 100, and must be at least 40.",
+      "exceptionAllowed": true
+    },
+    {
+      "field": "interviewStatus",
+      "type": "strict",
+      "validation": "required",
+      "errorMessage": "Interview Status must be selected."
+    },
+    {
+      "field": "offerLetterSent",
+      "type": "strict",
+      "validation": "conditional:interviewStatus:Rejected:false",
+      "errorMessage": "Offer Letter cannot be sent if Interview Status is Rejected."
+    }
+  ],
+  "rationaleKeywords": ["approved by", "special case", "documentation pending", "waiver granted"]
+}

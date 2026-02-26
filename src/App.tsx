@@ -20,6 +20,7 @@ import {
   AlertCircle,
   AlertTriangle // Added for soft warnings
 } from 'lucide-react';
+import validationConfig from './validationConfig.json';
 import { motion, AnimatePresence } from 'motion/react';
 
 type Qualification = 'B.Tech' | 'B.E.' | 'B.Sc' | 'BCA' | 'M.Tech' | 'M.Sc' | 'MCA' | 'MBA';
@@ -82,7 +83,7 @@ const INITIAL_DATA: FormData = {
   offerLetterSent: false,
 };
 
-const RATIONALE_PHRASES = ["approved by", "special case", "documentation pending", "waiver granted"];
+
 
 
 
