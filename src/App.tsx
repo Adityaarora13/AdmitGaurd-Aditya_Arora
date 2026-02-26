@@ -346,6 +346,13 @@ export default function App() {
 
   const isRejected = formData.interviewStatus === 'Rejected';
   const canSubmit = isFormValid && !isRejected;
+  const activeExceptionsCount = useMemo(() => {
+    return (Object.keys(softRuleStates) as Array<keyof SoftRuleStates>).filter(key => 
+      softRuleStates[key].isExcepted && !softRuleStates[key].rationaleError
+    ).length;
+  }, [softRuleStates]);
+
+  const isFlaggedForReview = activeExceptionsCount > 2;
 
   if (isSubmitted) {
     return (
@@ -359,7 +366,11 @@ export default function App() {
             <CheckCircle2 className="w-10 h-10 text-emerald-500" />
           </div>
           <h2 className="text-2xl font-semibold text-zinc-900 mb-2">Admission Submitted</h2>
-          <p className="text-zinc-500 mb-8">The candidate profile for <span className="font-medium text-zinc-900">{formData.fullName}</span> has been successfully recorded.</p>
+          <p className="text-zinc-500 mb-2">The candidate profile for <span className="font-medium text-zinc-900">{formData.fullName}</span> has been successfully recorded.</p>
+          {isFlaggedForReview && (
+            <p className="text-red-500 font-medium mb-6">Flagged for Manager Review</p>
+          )}
+          <p className="text-zinc-500 mb-8"></p>
           <button 
             onClick={() => { setIsSubmitted(false); setStep(1); setFormData(INITIAL_DATA); setValidationErrors({}); }}
             className="w-full py-3 bg-zinc-900 text-white rounded-xl font-medium hover:bg-zinc-800 transition-colors"
@@ -684,6 +695,26 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Active Exceptions Count */}
+            <div className="text-sm text-zinc-600 mb-4 text-center">
+              Active Exceptions: {activeExceptionsCount}/4
+            </div>
+
+            {/* Flagged for Review Banner */}
+            <AnimatePresence>
+              {isFlaggedForReview && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="bg-amber-100 text-amber-800 p-4 rounded-xl mb-6 flex items-center gap-3 shadow-md"
+                >
+                  <AlertTriangle className="w-5 h-5" />
+                  <p className="font-medium">This candidate has more than 2 exceptions. Entry will be flagged for manager review.</p>
                 </motion.div>
               )}
             </AnimatePresence>
